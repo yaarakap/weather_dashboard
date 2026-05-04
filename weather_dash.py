@@ -7,17 +7,6 @@ import plotly.express as px
 global_df = pd.read_csv("GlobalWeatherRepository.csv")
 us_df = pd.read_csv("weather_data.csv")
 
-coords = global_df[["location_name", "latitude", "longitude", 
-                    "temperature_celsius", "temperature_fahrenheit", "condition_text"]]
-fig = px.scatter_map(coords, lat="latitude", lon="longitude", 
-                     hover_name="location_name", 
-                     hover_data={"latitude": False, "longitude": False, 
-                                 "temperature_celsius": True, "temperature_fahrenheit": True,
-                                 "condition_text": True},
-                     zoom=2, height=400, width=560)
-fig.update_layout(mapbox_style="open-street-map")
-fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
-
 global_df.rename(columns={"temperature_celsius": "temp (C°)", 
                           "temperature_fahrenheit": "temp (F°)",
                           "condition_text": "condition",
@@ -31,57 +20,94 @@ global_df.rename(columns={"temperature_celsius": "temp (C°)",
                           "uv_index": "UV index"},
                 inplace=True)
 
+
+coords = global_df[["location_name", "latitude", "longitude", 
+                    "temp (C°)", "temp (F°)", "condition"]]
+fig = px.scatter_map(coords, lat="latitude", lon="longitude", 
+                     hover_name="location_name", 
+                     hover_data={"latitude": False, "longitude": False, 
+                                 "temp (C°)": True, "temp (F°)": True,
+                                 "condition": True},
+                     zoom=2, height=400, width=560)
+fig.update_layout(mapbox_style="open-street-map")
+fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
+
 metric_df = global_df[['country', 'location_name', 'temp (C°)', 
                        'condition', 'wind (kph)',
-        'wind_direction', 'pressure (mb)', 
-       'precipitation (mm)', 'humidity', 'cloud', 'feels like (C°)',
-       'visibility (km)', 'UV index', 'gust (kph)']]
+                        'wind_direction', 'pressure (mb)', 
+                        'precipitation (mm)', 'humidity', 'cloud', 'feels like (C°)',
+                        'visibility (km)', 'UV index', 'gust (kph)']]
 
 imp_df = global_df[['country', 'location_name',
-       'temp (F°)', 'condition', 'wind (mph)',
-       'wind_direction', 'pressure (in)',
-       'precipitation (in)', 'humidity', 'cloud',
-       'feels like (F°)', 'visibilit (mi)',
-       'UV index', 'gust (mph)']
-]
+                    'temp (F°)', 'condition', 'wind (mph)',
+                    'wind_direction', 'pressure (in)',
+                    'precipitation (in)', 'humidity', 'cloud',
+                    'feels like (F°)', 'visibilit (mi)',
+                    'UV index', 'gust (mph)']]
+
+title = html.Div(children=["My Weather Dashboard"], 
+             style={"font-family": "Verdana", "font-size": "24px", 
+                    "font-weight": "bold", "marginBottom": "13px", 
+                    "text-align": "center", "color": "blue"})
+
+global_dag = dag.AgGrid(
+                id="grid",
+                style={"height": "90vh", "overflowX": "auto"},
+                columnDefs=[
+                    {"field": i, "minWidth": 140, "resizable": True,
+                    } for i in metric_df.columns],
+                rowData=metric_df.to_dict("records"),
+                columnSize="sizeToFit",
+                defaultColDef={
+                    "resizable": True,
+                    "sortable": True,
+                    # Wrap cell values
+                    "wrapText": True,
+                    "autoHeight": True,
+                    # Wrap header text
+                    "wrapHeaderText": True,
+                    "autoHeaderHeight": True,
+                    # Optional: ensure word breaks are normal
+                    "cellStyle": {
+                            "lineHeight": "1.5",    # Reduces space between lines of text
+                            "paddingTop": "7px",    # Reduces top padding
+                            "paddingBottom": "5px",  # Reduces bottom padding
+                            "wordBreak": "normal"
+                        }
+                },
+                dashGridOptions={"suppressColumnVirtualisation": True,
+                                 "theme": {
+                                    "function": "themeQuartz.withParams({ rowVerticalPaddingScale: 0.8, headerHeight: 40 })"
+                                    }
+                                },
+            )
+
+radio_items = dcc.RadioItems(options=[{"label": "Metric", "value": "metric_df"}, 
+                            {"label": "Imperial", "value": "imp_df"}], 
+                    value='metric_df', 
+                    id='controls-and-radio-item',
+                    inline=True)
 
 
 app = Dash(__name__)
 
 app.layout = html.Div(children=[
-    dcc.RadioItems(options=[{"label": "Metric", "value": "metric_df"}, 
-                            {"label": "Imperial", "value": "imp_df"}], 
-                    value='metric_df', 
-                    id='controls-and-radio-item',
-                    inline=True),
-    html.Hr(),
+    title,    
     html.Div(
-        style={"display": "flex", "flexDirection": "row", "gap": "5px"},
+        style={"display": "flex", "flexDirection": "row", "gap": "7px"},
         children=[
-            dag.AgGrid(
-                id="grid",
-                style={"width": "60vw", "height": "95vh", "overflowX": "auto"},
-                columnDefs=[{"field": i, "minWidth": 120, "maxWidth": 200, "resizable": True, } 
-                            for i in metric_df.columns],
-                rowData=metric_df.to_dict("records"),
-                columnSize="autoSize",
-                dashGridOptions={"suppressColumnVirtualisation": True},
-            defaultColDef={
-                "wrapText": True,
-                "autoHeight": True,
-                "cellStyle": {"wordBreak": "normal"}
-            }),
-            dcc.Graph(figure=fig, style={"width": "15vw", "height": "95vh"})
+            global_dag,
+            html.Div(children=[
+                html.Hr(),
+                radio_items,
+                html.Hr(),
+                dcc.Graph(figure=fig, style={"height": "95vh"})
+                ]
+            )
         ]
     )
 ])
 
-@app.callback(
-    Output("grid", "columnSize"),
-    Input("grid", "rowData"),
-)
-def resize_columns(_):
-    return "autoSize"
 
 @app.callback(
     Output('grid', 'rowData'),
